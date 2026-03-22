@@ -349,7 +349,7 @@ body {
 
 /* ── 角色管理面板 CharPanel ── */
 #char-panel {
-  position: absolute; inset: 0; z-index: 65;
+  position: fixed; inset: 0; z-index: 200;
   background: rgba(4,2,14,0.9); backdrop-filter: blur(14px);
   display: flex; align-items: center; justify-content: center;
   opacity: 0; pointer-events: none; transition: opacity 0.35s var(--ease-out-expo);
@@ -473,9 +473,26 @@ body {
     <button class="sys-btn" onclick="ScriptEditor.open()">編輯器</button>
   </div>
 
-  <!-- 角色管理面板 -->
-  <div id="char-panel">
-    <div id="char-panel-wrap">
+  <!-- 音量控制 -->
+  <div id="audio-bar">
+    <button id="mute-btn" onclick="AudioManager.toggleMute()">🔊</button>
+    <label>音量</label>
+    <input id="vol-slider" type="range" min="0" max="1" step="0.05" value="0.5"
+           oninput="AudioManager.setVolume(this.value)">
+  </div>
+
+  <!-- 存檔面板 -->
+  <div id="save-panel">
+    <div class="save-panel-title" id="save-panel-title">── 選擇存檔欄位 ──</div>
+    <div class="save-slots" id="save-slots"></div>
+    <div class="save-panel-close" onclick="SaveManager.closePanel()">✕ 關閉</div>
+  </div>
+
+</div><!-- /#game -->
+
+<!-- 角色管理面板（fixed，不受 #game overflow:hidden 裁切）-->
+<div id="char-panel">
+  <div id="char-panel-wrap">
       <div id="char-panel-header">
         <h3>✦ 外部角色管理</h3>
         <button id="char-panel-close" onclick="CharPanel.close()">✕</button>
@@ -665,7 +682,98 @@ charShow: { sakura: { expr:'smile', pos:'right' } }
       </div>
     </div>
   </div>
-</div>
+</div><!-- /#editor-modal -->
+
+<!-- 角色管理面板（position:fixed，不受 #game overflow:hidden 裁切）-->
+<div id="char-panel">
+  <div id="char-panel-wrap">
+    <div id="char-panel-header">
+      <h3>✦ 外部角色管理</h3>
+      <button id="char-panel-close" onclick="CharPanel.close()">✕</button>
+    </div>
+    <div id="char-panel-body">
+
+      <!-- 左：新增角色表單 -->
+      <div id="char-form">
+        <div class="ed-label">角色 ID（英文，劇本中使用）</div>
+        <input id="cp-name" class="ed-input" placeholder="e.g. sakura">
+
+        <div class="ed-label">預設位置</div>
+        <select id="cp-pos" class="ed-select">
+          <option value="left">left — 左</option>
+          <option value="center">center — 中</option>
+          <option value="right">right — 右</option>
+        </select>
+
+        <div class="ed-label" style="margin-top:4px">表情圖片（PNG / WebP 建議透明底）</div>
+        <div class="cp-expr-row" data-expr="normal">
+          <div class="cp-expr-label">normal（必填）</div>
+          <div class="cp-expr-inputs">
+            <input class="ed-input cp-url" placeholder="圖片 URL 或 base64">
+            <button class="cp-file-btn" onclick="this.nextElementSibling.click()">上傳</button>
+            <input type="file" class="cp-file" accept="image/*"
+                   onchange="this.previousElementSibling.previousElementSibling.value='';
+                             this.closest('.cp-expr-row').querySelector('.cp-file-name').textContent=this.files[0]?.name||''">
+          </div>
+          <div class="cp-file-name"></div>
+        </div>
+        <div class="cp-expr-row" data-expr="smile">
+          <div class="cp-expr-label">smile（可留空，fallback normal）</div>
+          <div class="cp-expr-inputs">
+            <input class="ed-input cp-url" placeholder="圖片 URL 或 base64">
+            <button class="cp-file-btn" onclick="this.nextElementSibling.click()">上傳</button>
+            <input type="file" class="cp-file" accept="image/*"
+                   onchange="this.previousElementSibling.previousElementSibling.value='';
+                             this.closest('.cp-expr-row').querySelector('.cp-file-name').textContent=this.files[0]?.name||''">
+          </div>
+          <div class="cp-file-name"></div>
+        </div>
+        <div class="cp-expr-row" data-expr="surprised">
+          <div class="cp-expr-label">surprised（可留空，fallback normal）</div>
+          <div class="cp-expr-inputs">
+            <input class="ed-input cp-url" placeholder="圖片 URL 或 base64">
+            <button class="cp-file-btn" onclick="this.nextElementSibling.click()">上傳</button>
+            <input type="file" class="cp-file" accept="image/*"
+                   onchange="this.previousElementSibling.previousElementSibling.value='';
+                             this.closest('.cp-expr-row').querySelector('.cp-file-name').textContent=this.files[0]?.name||''">
+          </div>
+          <div class="cp-file-name"></div>
+        </div>
+
+        <button id="cp-submit-btn" onclick="CharPanel.submit()" style="margin-top:10px">＋ 登錄角色</button>
+        <div id="cp-status"></div>
+      </div>
+
+      <!-- 右：預覽 + 已登錄列表 + API 說明 -->
+      <div id="char-sidebar">
+        <div id="cp-preview-wrap">
+          <label>預覽</label>
+          <canvas id="cp-preview"></canvas>
+        </div>
+
+        <div id="cp-char-list-wrap">
+          <div class="ed-label" style="margin-bottom:6px">已登錄角色</div>
+          <div id="cp-char-list"></div>
+        </div>
+
+        <div class="ed-label" style="margin-top:4px">JS API（瀏覽器 Console）</div>
+        <div class="cp-api-hint">
+// URL 方式<br>
+await CharRegistry.register('sakura', {<br>
+&nbsp;&nbsp;pos: 'right',<br>
+&nbsp;&nbsp;expressions: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;normal: 'https://…/normal.png',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;smile:  'https://…/smile.png'<br>
+&nbsp;&nbsp;}<br>
+});<br><br>
+// 劇本中使用<br>
+charShow: { sakura: { expr:'smile', pos:'right' } }
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div><!-- /#char-panel -->
 
 <script>
 // ══════════════════════════════════════════════════════
