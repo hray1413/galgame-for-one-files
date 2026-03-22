@@ -1,0 +1,2201 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>星落之夜 ✦ A Galgame</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;700&family=Cinzel:wght@400;700&display=swap');
+
+:root {
+  --bg:           #0a0812;
+  --panel:        rgba(12, 8, 28, 0.92);
+  --border:       rgba(200, 170, 255, 0.25);
+  --text:         #e8dff8;
+  --name:         #c9a8ff;
+  --accent:       #ff8fcf;
+  --gold:         #f5d87a;
+  --choice-bg:    rgba(30, 15, 55, 0.85);
+  --choice-hover: rgba(180, 100, 255, 0.2);
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  font-family: 'Noto Serif TC', serif;
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game {
+  position: relative;
+  width: min(900px, 100vw);
+  height: min(600px, 100vh);
+  background: #0a0812;
+  overflow: hidden;
+  box-shadow: 0 0 80px rgba(150, 80, 255, 0.3);
+}
+
+#bg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* ── 標題 ── */
+#title-screen {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; z-index: 100;
+  background: radial-gradient(ellipse at 50% 40%, rgba(100,40,180,0.4) 0%, transparent 70%);
+}
+#title-screen h1 {
+  font-size: 3rem; font-weight: 700; color: var(--gold);
+  letter-spacing: 0.2em; animation: titleGlow 3s ease-in-out infinite alternate;
+}
+#title-screen .subtitle {
+  font-family: 'Cinzel', serif; font-size: 0.9rem;
+  color: rgba(200,170,255,0.7); letter-spacing: 0.4em; margin-top: 0.5rem;
+}
+@keyframes titleGlow {
+  from { text-shadow: 0 0 30px rgba(245,216,122,0.5), 0 0 60px rgba(245,216,122,0.2); }
+  to   { text-shadow: 0 0 55px rgba(245,216,122,0.9), 0 0 110px rgba(245,216,122,0.4), 0 0 160px rgba(200,120,255,0.25); }
+}
+.start-btn {
+  margin-top: 3rem; padding: 0.9rem 3rem; border: 1px solid var(--gold);
+  background: transparent; color: var(--gold); font-family: 'Noto Serif TC', serif;
+  font-size: 1rem; letter-spacing: 0.3em; cursor: pointer;
+  transition: all 0.4s; position: relative; overflow: hidden;
+}
+.start-btn::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(245,216,122,0.12), transparent);
+  transform: translateX(-100%); transition: transform 0.4s;
+}
+.start-btn:hover::before { transform: translateX(0); }
+.start-btn:hover { background: rgba(245,216,122,0.08); box-shadow: 0 0 30px rgba(245,216,122,0.35); }
+
+/* ── 角色 ── */
+#character-layer {
+  position: absolute; bottom: 160px; left: 0; right: 0;
+  display: flex; justify-content: center; align-items: flex-end;
+  pointer-events: none; z-index: 10;
+}
+.character {
+  width: 280px; height: 380px; position: absolute; bottom: 0;
+  transition: transform 0.8s var(--ease-out-expo), opacity 0.6s ease, filter 0.4s ease;
+}
+.character.hidden   { opacity: 0; transform: translateY(20px) scale(0.95); pointer-events: none; }
+.character.active   { opacity: 1; transform: translateY(0) scale(1); }
+.character.inactive { opacity: 0.38; filter: brightness(0.5) saturate(0.3); }
+.character.left   { left: 8%; }
+.character.center { left: 50%; transform: translateX(-50%); }
+.character.center.inactive { transform: translateX(-50%); filter: brightness(0.5) saturate(0.3); opacity: 0.38; }
+.character.right  { right: 8%; }
+
+/* ── 對話框 ── */
+#dialogue-box {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 158px;
+  background: var(--panel); border-top: 1px solid var(--border);
+  padding: 14px 28px 18px; z-index: 20;
+  backdrop-filter: blur(12px); cursor: pointer; transition: opacity 0.3s;
+}
+#dialogue-box::before {
+  content: ''; position: absolute; top: -1px; left: 10%; right: 10%; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--name), transparent);
+}
+#speaker-name {
+  font-size: 0.85rem; font-weight: 700; color: var(--name);
+  letter-spacing: 0.15em; margin-bottom: 10px;
+  text-shadow: 0 0 12px rgba(200,168,255,0.5); min-height: 1.2em;
+}
+#dialogue-text { font-size: 1rem; line-height: 1.9; color: var(--text); min-height: 3.8em; white-space: pre-wrap; }
+#click-hint {
+  position: absolute; bottom: 14px; right: 22px;
+  font-size: 0.7rem; color: rgba(200,170,255,0.5);
+  animation: blink 1.5s ease-in-out infinite; transition: opacity 0.3s;
+}
+#click-hint.hidden { opacity: 0; animation: none; }
+@keyframes blink { 0%,100%{opacity:0.3} 50%{opacity:1} }
+
+/* ── 選項 ── */
+#choice-layer {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px; z-index: 30;
+  background: rgba(5,2,15,0.62); backdrop-filter: blur(4px); padding: 2rem;
+}
+#choice-layer.hidden { display: none; }
+.choice-title { font-size: 0.8rem; letter-spacing: 0.4em; color: rgba(200,170,255,0.6); margin-bottom: 0.5rem; }
+.choice-btn {
+  width: min(520px, 90%); padding: 1rem 2rem;
+  background: var(--choice-bg); border: 1px solid var(--border);
+  color: var(--text); font-family: 'Noto Serif TC', serif;
+  font-size: 0.95rem; text-align: left; cursor: pointer;
+  transition: all 0.3s; position: relative; overflow: hidden; line-height: 1.6;
+}
+.choice-btn::before {
+  content: '▷'; position: absolute; left: -20px; top: 50%;
+  transform: translateY(-50%); color: var(--accent);
+  transition: left 0.3s; font-size: 0.8rem;
+}
+.choice-btn:hover { background: var(--choice-hover); border-color: var(--accent); padding-left: 2.5rem; color: white; }
+.choice-btn:hover::before { left: 1rem; }
+
+/* ── CG ── */
+#cg-layer {
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.8s;
+}
+#cg-layer.show { opacity: 1; pointer-events: all; }
+#cg-canvas { width: 100%; height: 100%; }
+#cg-skip {
+  position: absolute; bottom: 20px; right: 22px;
+  color: rgba(255,255,255,0.5); font-size: 0.75rem;
+  letter-spacing: 0.2em; cursor: pointer; transition: color 0.2s;
+}
+#cg-skip:hover { color: white; }
+
+/* ── 結局 ── */
+#ending-screen {
+  position: absolute; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 80; opacity: 0; pointer-events: none; transition: opacity 1.5s;
+}
+#ending-screen.show { opacity: 1; pointer-events: all; }
+.ending-title { font-size: 1.8rem; color: var(--gold); text-shadow: 0 0 30px rgba(245,216,122,0.5); margin-bottom: 1rem; letter-spacing: 0.2em; }
+.ending-desc  { font-size: 0.9rem; color: rgba(200,170,255,0.72); text-align: center; line-height: 2; max-width: 480px; white-space: pre-wrap; }
+.restart-btn {
+  margin-top: 2.5rem; padding: 0.7rem 2rem;
+  border: 1px solid rgba(200,170,255,0.4); background: transparent;
+  color: rgba(200,170,255,0.8); font-family: 'Noto Serif TC', serif;
+  font-size: 0.85rem; letter-spacing: 0.2em; cursor: pointer; transition: all 0.3s;
+}
+.restart-btn:hover { background: rgba(200,170,255,0.1); color: white; }
+
+/* ── 過場 ── */
+#transition {
+  position: absolute; inset: 0; background: black; z-index: 90;
+  opacity: 0; pointer-events: none;
+}
+#transition.active { pointer-events: all; }
+
+/* ── 名片 ── */
+#name-card {
+  position: absolute; top: 20px; left: 20px;
+  background: rgba(15,8,35,0.72); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); padding: 8px 16px;
+  font-size: 0.75rem; color: rgba(200,170,255,0.72); letter-spacing: 0.1em;
+  opacity: 0; transform: translateX(-20px);
+  transition: opacity 0.5s var(--ease-out-expo), transform 0.5s var(--ease-out-expo);
+  z-index: 15; backdrop-filter: blur(8px);
+}
+#name-card.show { opacity: 1; transform: translateX(0); }
+
+/* ── 系統選單按鈕列 ── */
+#sys-bar {
+  position: absolute; top: 12px; right: 14px;
+  display: flex; gap: 8px; z-index: 25; opacity: 0;
+  transition: opacity 0.3s;
+}
+#game:hover #sys-bar { opacity: 1; }
+.sys-btn {
+  padding: 4px 12px; font-size: 0.7rem; letter-spacing: 0.12em;
+  font-family: 'Noto Serif TC', serif;
+  background: rgba(15,8,35,0.78); border: 1px solid var(--border);
+  color: rgba(200,170,255,0.75); cursor: pointer;
+  transition: all 0.25s; backdrop-filter: blur(8px);
+}
+.sys-btn:hover { border-color: var(--accent); color: white; background: rgba(40,15,70,0.9); }
+
+/* ── 存檔面板 ── */
+#save-panel {
+  position: absolute; inset: 0; z-index: 60;
+  background: rgba(4,2,14,0.88); backdrop-filter: blur(14px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  opacity: 0; pointer-events: none; transition: opacity 0.35s var(--ease-out-expo);
+}
+#save-panel.show { opacity: 1; pointer-events: all; }
+.save-panel-title {
+  font-size: 0.75rem; letter-spacing: 0.4em; color: rgba(200,170,255,0.55); margin-bottom: 4px;
+}
+.save-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.save-slot {
+  width: 180px; padding: 14px 16px; cursor: pointer;
+  background: rgba(20,10,45,0.9); border: 1px solid var(--border);
+  transition: all 0.25s; text-align: left;
+}
+.save-slot:hover { border-color: var(--name); background: rgba(40,20,70,0.9); }
+.save-slot.empty { opacity: 0.45; }
+.slot-label { font-size: 0.7rem; color: var(--name); letter-spacing: 0.1em; margin-bottom: 6px; }
+.slot-scene { font-size: 0.8rem; color: var(--text); }
+.slot-time  { font-size: 0.65rem; color: rgba(180,160,220,0.5); margin-top: 4px; }
+.save-panel-close {
+  margin-top: 8px; font-size: 0.72rem; color: rgba(200,170,255,0.45);
+  cursor: pointer; letter-spacing: 0.2em; transition: color 0.2s;
+}
+.save-panel-close:hover { color: var(--accent); }
+.slot-actions { display: flex; gap: 6px; margin-top: 10px; }
+.slot-btn {
+  flex: 1; padding: 5px 0; font-size: 0.68rem; letter-spacing: 0.08em;
+  font-family: 'Noto Serif TC', serif;
+  border: 1px solid var(--border); background: transparent;
+  color: rgba(200,170,255,0.65); cursor: pointer; transition: all 0.2s;
+}
+.slot-btn:hover { border-color: var(--accent); color: white; }
+.slot-btn.danger:hover { border-color: #ff6060; color: #ff6060; }
+
+/* ── 音量控制 ── */
+#audio-bar {
+  position: absolute; bottom: 168px; right: 14px; z-index: 25;
+  display: flex; align-items: center; gap: 8px;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+#game:hover #audio-bar { opacity: 1; pointer-events: all; }
+#audio-bar label { font-size: 0.65rem; color: rgba(200,170,255,0.5); letter-spacing: 0.1em; }
+#vol-slider {
+  -webkit-appearance: none; appearance: none;
+  width: 80px; height: 3px; border-radius: 2px;
+  background: rgba(200,170,255,0.25); outline: none; cursor: pointer;
+}
+#vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--name); cursor: pointer;
+}
+#mute-btn {
+  font-size: 0.75rem; background: none; border: none;
+  color: rgba(200,170,255,0.5); cursor: pointer; padding: 0 2px;
+  transition: color 0.2s;
+}
+#mute-btn:hover { color: var(--accent); }
+
+/* ── 劇本編輯器 ── */
+#editor-modal {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(2,1,8,0.92); backdrop-filter: blur(16px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s;
+}
+#editor-modal.show { opacity: 1; pointer-events: all; }
+#editor-wrap {
+  width: min(820px, 96vw); height: min(580px, 92vh);
+  background: #0e0820; border: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#editor-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  background: rgba(20,10,40,0.8);
+}
+#editor-header h3 { font-size: 0.82rem; color: var(--name); letter-spacing: 0.2em; font-weight: 400; }
+#editor-close { background: none; border: none; color: rgba(200,170,255,0.5); font-size: 1rem; cursor: pointer; transition: color 0.2s; }
+#editor-close:hover { color: var(--accent); }
+#editor-body { display: flex; flex: 1; overflow: hidden; }
+#editor-left {
+  width: 300px; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; padding: 12px;
+  gap: 8px; overflow-y: auto;
+}
+#editor-right { flex: 1; display: flex; flex-direction: column; }
+#editor-right textarea {
+  flex: 1; background: #080614; color: #c8e8c8;
+  border: none; outline: none; padding: 14px;
+  font-family: 'Consolas', 'Monaco', monospace; font-size: 0.78rem; line-height: 1.7;
+  resize: none;
+}
+.ed-label { font-size: 0.68rem; color: rgba(200,170,255,0.5); letter-spacing: 0.15em; margin-top: 4px; }
+.ed-input, .ed-select, .ed-textarea {
+  background: rgba(10,5,25,0.8); border: 1px solid var(--border);
+  color: var(--text); padding: 6px 8px; font-size: 0.8rem;
+  font-family: 'Noto Serif TC', serif; width: 100%; outline: none;
+  transition: border-color 0.2s;
+}
+.ed-input:focus, .ed-select:focus, .ed-textarea:focus { border-color: var(--name); }
+.ed-select option { background: #0e0820; }
+.ed-textarea { resize: vertical; min-height: 60px; }
+.ed-row { display: flex; gap: 6px; }
+.ed-row .ed-input, .ed-row .ed-select { flex: 1; }
+#ed-add-btn, #ed-gen-btn, #ed-copy-btn {
+  padding: 7px 0; font-size: 0.72rem; letter-spacing: 0.15em;
+  font-family: 'Noto Serif TC', serif; cursor: pointer; transition: all 0.25s;
+  border: 1px solid var(--border); background: transparent; color: var(--text); width: 100%;
+}
+#ed-add-btn:hover  { border-color: var(--name);   color: white; background: rgba(100,50,180,0.2); }
+#ed-gen-btn:hover  { border-color: var(--gold);   color: var(--gold); }
+#ed-copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+#ed-node-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 180px; overflow-y: auto; margin-top: 4px;
+}
+.ed-node-item {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  background: rgba(20,10,40,0.7); border: 1px solid transparent;
+  font-size: 0.72rem; color: rgba(200,170,255,0.7); cursor: pointer; transition: all 0.2s;
+}
+.ed-node-item:hover { border-color: var(--border); color: white; }
+.ed-node-item.selected { border-color: var(--name); background: rgba(100,50,180,0.2); color: white; }
+.ed-node-badge {
+  font-size: 0.62rem; padding: 1px 5px; border-radius: 2px;
+  background: rgba(100,50,180,0.4); color: var(--name); flex-shrink: 0;
+}
+.ed-node-del { margin-left: auto; color: rgba(255,100,100,0.4); transition: color 0.2s; background: none; border: none; cursor: pointer; font-size: 0.8rem; }
+.ed-node-del:hover { color: #ff6060; }
+#editor-footer {
+  display: flex; gap: 8px; padding: 10px 14px;
+  border-top: 1px solid var(--border); background: rgba(10,5,25,0.6);
+}
+#ed-scene-name { flex: 1; }
+.ed-status { font-size: 0.68rem; color: rgba(200,170,255,0.4); display: flex; align-items: center; }
+
+/* ── 角色管理面板 CharPanel ── */
+#char-panel {
+  position: absolute; inset: 0; z-index: 65;
+  background: rgba(4,2,14,0.9); backdrop-filter: blur(14px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.35s var(--ease-out-expo);
+}
+#char-panel.show { opacity: 1; pointer-events: all; }
+#char-panel-wrap {
+  width: min(700px, 95vw); background: #0e0820;
+  border: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden;
+}
+#char-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  background: rgba(20,10,40,0.8);
+}
+#char-panel-header h3 { font-size: 0.82rem; color: var(--accent); letter-spacing: 0.2em; font-weight: 400; }
+#char-panel-close { background: none; border: none; color: rgba(200,170,255,0.5); font-size: 1rem; cursor: pointer; transition: color 0.2s; }
+#char-panel-close:hover { color: var(--accent); }
+#char-panel-body { display: flex; overflow: hidden; }
+#char-form {
+  width: 320px; padding: 14px; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 7px; overflow-y: auto; max-height: 480px;
+}
+#char-sidebar {
+  flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+}
+.cp-expr-row { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: rgba(15,8,35,0.5); border: 1px solid var(--border); }
+.cp-expr-label { font-size: 0.68rem; color: var(--accent); letter-spacing: 0.1em; }
+.cp-expr-inputs { display: flex; gap: 6px; align-items: center; }
+.cp-url   { flex: 1; }
+.cp-file  { display: none; }
+.cp-file-btn {
+  padding: 4px 10px; font-size: 0.68rem; letter-spacing: 0.08em;
+  font-family: 'Noto Serif TC', serif; border: 1px solid var(--border);
+  background: transparent; color: rgba(200,170,255,0.65); cursor: pointer;
+  white-space: nowrap; transition: all 0.2s; flex-shrink: 0;
+}
+.cp-file-btn:hover { border-color: var(--accent); color: white; }
+.cp-file-name { font-size: 0.65rem; color: rgba(200,170,255,0.45); margin-top: 2px; min-height: 1em; }
+#cp-submit-btn {
+  padding: 8px 0; font-size: 0.75rem; letter-spacing: 0.2em;
+  font-family: 'Noto Serif TC', serif; border: 1px solid var(--accent);
+  background: rgba(255,143,207,0.08); color: var(--accent); cursor: pointer;
+  transition: all 0.25s; margin-top: 4px;
+}
+#cp-submit-btn:hover { background: rgba(255,143,207,0.18); color: white; }
+#cp-status { font-size: 0.7rem; min-height: 1.2em; color: rgba(180,255,180,0.7); }
+#cp-preview-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+#cp-preview-wrap label { font-size: 0.68rem; color: rgba(200,170,255,0.5); letter-spacing: 0.15em; }
+#cp-preview {
+  width: 140px; height: 190px;
+  background: rgba(10,5,25,0.8); border: 1px solid var(--border);
+}
+#cp-char-list-wrap { flex: 1; }
+#cp-char-list { display: flex; flex-direction: column; gap: 5px; max-height: 200px; overflow-y: auto; }
+.cp-char-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  background: rgba(20,10,40,0.7); border: 1px solid var(--border); font-size: 0.75rem;
+}
+.cp-char-name  { flex: 1; color: var(--text); }
+.cp-char-badge { font-size: 0.62rem; padding: 1px 6px; background: rgba(20,10,40,0.9); }
+.cp-mini-btn {
+  font-size: 0.65rem; padding: 3px 8px; background: transparent;
+  border: 1px solid var(--border); color: rgba(200,170,255,0.6); cursor: pointer;
+  font-family: 'Noto Serif TC', serif; transition: all 0.2s;
+}
+.cp-mini-btn:hover { border-color: var(--name); color: white; }
+.cp-api-hint {
+  font-size: 0.68rem; color: rgba(200,170,255,0.38); line-height: 1.8;
+  background: rgba(10,5,25,0.6); padding: 8px 10px; border: 1px solid var(--border);
+  font-family: 'Consolas', monospace;
+}
+
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="bg-canvas"></canvas>
+
+  <div id="cg-layer">
+    <canvas id="cg-canvas" width="900" height="600"></canvas>
+    <div id="cg-skip">▷ 點擊繼續</div>
+  </div>
+
+  <div id="character-layer">
+    <canvas id="char-luna" class="character hidden left"  width="280" height="380"></canvas>
+    <canvas id="char-rei"  class="character hidden right" width="280" height="380"></canvas>
+  </div>
+
+  <div id="name-card"></div>
+
+  <div id="dialogue-box" onclick="Game.handleClick()">
+    <div id="speaker-name"></div>
+    <div id="dialogue-text"></div>
+    <div id="click-hint" class="hidden">▼ 點擊繼續</div>
+  </div>
+
+  <div id="choice-layer" class="hidden">
+    <div class="choice-title">── 請做出選擇 ──</div>
+  </div>
+
+  <div id="transition"></div>
+
+  <div id="title-screen">
+    <h1>星落之夜</h1>
+    <div class="subtitle">STARFALL NIGHT ✦ A Visual Novel</div>
+    <button class="start-btn" onclick="Game.start()">▷ 開始故事</button>
+  </div>
+
+  <div id="ending-screen">
+    <div class="ending-title" id="ending-title"></div>
+    <div class="ending-desc"  id="ending-desc"></div>
+    <button class="restart-btn" onclick="location.reload()">↺ 重新開始</button>
+  </div>
+
+  <!-- 系統按鈕列 -->
+  <div id="sys-bar">
+    <button class="sys-btn" onclick="SaveManager.openPanel('save')">儲存</button>
+    <button class="sys-btn" onclick="SaveManager.openPanel('load')">讀取</button>
+    <button class="sys-btn" onclick="AudioManager.toggle()">♪</button>
+    <button class="sys-btn" onclick="CharPanel.open()">角色</button>
+    <button class="sys-btn" onclick="ScriptEditor.open()">編輯器</button>
+  </div>
+
+  <!-- 角色管理面板 -->
+  <div id="char-panel">
+    <div id="char-panel-wrap">
+      <div id="char-panel-header">
+        <h3>✦ 外部角色管理</h3>
+        <button id="char-panel-close" onclick="CharPanel.close()">✕</button>
+      </div>
+      <div id="char-panel-body">
+
+        <!-- 左：新增角色表單 -->
+        <div id="char-form">
+          <div class="ed-label">角色 ID（英文，劇本中使用）</div>
+          <input id="cp-name" class="ed-input" placeholder="e.g. sakura">
+
+          <div class="ed-label">預設位置</div>
+          <select id="cp-pos" class="ed-select">
+            <option value="left">left — 左</option>
+            <option value="center">center — 中</option>
+            <option value="right" >right — 右</option>
+          </select>
+
+          <!-- 三個表情欄位 -->
+          <div class="ed-label" style="margin-top:4px">表情圖片（PNG / WebP 建議透明底）</div>
+          <div class="cp-expr-row" data-expr="normal">
+            <div class="cp-expr-label">normal（必填）</div>
+            <div class="cp-expr-inputs">
+              <input class="ed-input cp-url" placeholder="圖片 URL 或 base64">
+              <button class="cp-file-btn" onclick="this.nextElementSibling.click()">上傳</button>
+              <input type="file" class="cp-file" accept="image/*"
+                     onchange="this.previousElementSibling.previousElementSibling.value='';
+                               this.closest('.cp-expr-row').querySelector('.cp-file-name').textContent=this.files[0]?.name||''">
+            </div>
+            <div class="cp-file-name"></div>
+          </div>
+          <div class="cp-expr-row" data-expr="smile">
+            <div class="cp-expr-label">smile（可留空，fallback normal）</div>
+            <div class="cp-expr-inputs">
+              <input class="ed-input cp-url" placeholder="圖片 URL 或 base64">
+              <button class="cp-file-btn" onclick="this.nextElementSibling.click()">上傳</button>
+              <input type="file" class="cp-file" accept="image/*"
+                     onchange="this.previousElementSibling.previousElementSibling.value='';
+                               this.closest('.cp-expr-row').querySelector('.cp-file-name').textContent=this.files[0]?.name||''">
+            </div>
+            <div class="cp-file-name"></div>
+          </div>
+          <div class="cp-expr-row" data-expr="surprised">
+            <div class="cp-expr-label">surprised（可留空，fallback normal）</div>
+            <div class="cp-expr-inputs">
+              <input class="ed-input cp-url" placeholder="圖片 URL 或 base64">
+              <button class="cp-file-btn" onclick="this.nextElementSibling.click()">上傳</button>
+              <input type="file" class="cp-file" accept="image/*"
+                     onchange="this.previousElementSibling.previousElementSibling.value='';
+                               this.closest('.cp-expr-row').querySelector('.cp-file-name').textContent=this.files[0]?.name||''">
+            </div>
+            <div class="cp-file-name"></div>
+          </div>
+
+          <button id="cp-submit-btn" onclick="CharPanel.submit()">＋ 登錄角色</button>
+          <div id="cp-status"></div>
+        </div>
+
+        <!-- 右：預覽 + 已登錄角色列表 + JS API 說明 -->
+        <div id="char-sidebar">
+          <div id="cp-preview-wrap">
+            <label>預覽</label>
+            <canvas id="cp-preview"></canvas>
+          </div>
+
+          <div id="cp-char-list-wrap">
+            <div class="ed-label" style="margin-bottom:6px">已登錄角色</div>
+            <div id="cp-char-list"></div>
+          </div>
+
+          <div class="ed-label" style="margin-top:4px">JS API（在瀏覽器 Console 使用）</div>
+          <div class="cp-api-hint">
+// URL 方式<br>
+await CharRegistry.register('sakura', {<br>
+&nbsp;&nbsp;pos: 'right',<br>
+&nbsp;&nbsp;expressions: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;normal: 'https://…/normal.png',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;smile:  'https://…/smile.png'<br>
+&nbsp;&nbsp;}<br>
+});<br><br>
+// 劇本中直接使用<br>
+charShow: { sakura: { expr:'smile', pos:'right' } }
+          </div>
+        </div>
+
+      </div><!-- /#char-panel-wrap -->
+  </div><!-- /#char-panel -->
+
+  <!-- 音量控制 -->
+  <div id="audio-bar">
+    <button id="mute-btn" onclick="AudioManager.toggleMute()">🔊</button>
+    <label>音量</label>
+    <input id="vol-slider" type="range" min="0" max="1" step="0.05" value="0.5"
+           oninput="AudioManager.setVolume(this.value)">
+  </div>
+
+  <!-- 存檔面板 -->
+  <div id="save-panel">
+    <div class="save-panel-title" id="save-panel-title">── 選擇存檔欄位 ──</div>
+    <div class="save-slots" id="save-slots"></div>
+    <div class="save-panel-close" onclick="SaveManager.closePanel()">✕ 關閉</div>
+  </div>
+
+</div><!-- /#game -->
+
+<!-- 劇本編輯器（遊戲外層，避免 overflow:hidden 裁切） -->
+<div id="editor-modal">
+  <div id="editor-wrap">
+    <div id="editor-header">
+      <h3>✦ 劇本編輯器 ── JSON 生成器</h3>
+      <button id="editor-close" onclick="ScriptEditor.close()">✕</button>
+    </div>
+    <div id="editor-body">
+      <div id="editor-left">
+        <div class="ed-label">場景名稱</div>
+        <div id="editor-footer" style="padding:0;border:none;background:none;margin-bottom:4px;">
+          <input id="ed-scene-name" class="ed-input" placeholder="e.g. ch3" value="new_scene">
+        </div>
+        <div class="ed-label">節點類型</div>
+        <select id="ed-type" class="ed-select" onchange="ScriptEditor.onTypeChange()">
+          <option value="dialogue">dialogue — 對話</option>
+          <option value="choice">choice — 選項</option>
+          <option value="cg">cg — CG 演出</option>
+          <option value="fade">fade — 過場</option>
+          <option value="ending">ending — 結局</option>
+        </select>
+
+        <!-- dialogue 欄位 -->
+        <div id="ed-fields-dialogue">
+          <div class="ed-label">說話者</div>
+          <input id="ed-speaker" class="ed-input" placeholder="留空 = 旁白">
+          <div class="ed-label">台詞文字</div>
+          <textarea id="ed-text" class="ed-textarea" rows="3" placeholder="支援 \n 換行"></textarea>
+          <div class="ed-label">背景 bg（可留空）</div>
+          <select id="ed-bg" class="ed-select">
+            <option value="">— 不變 —</option>
+            <option value="night">night</option>
+            <option value="starfall">starfall</option>
+          </select>
+          <div class="ed-label">charShow（JSON，可留空）</div>
+          <input id="ed-charShow" class="ed-input" placeholder='{"luna":{"expr":"smile","pos":"center"}}'>
+          <div class="ed-label">charHide（逗號分隔，可留空）</div>
+          <input id="ed-charHide" class="ed-input" placeholder="luna,rei">
+          <div class="ed-label">active（可留空）</div>
+          <input id="ed-active" class="ed-input" placeholder="luna">
+        </div>
+
+        <!-- choice 欄位 -->
+        <div id="ed-fields-choice" style="display:none">
+          <div class="ed-label">選項（每行一個 "文字|next_scene"）</div>
+          <textarea id="ed-choices" class="ed-textarea" rows="4" placeholder="選項一|scene_a&#10;選項二|scene_b"></textarea>
+        </div>
+
+        <!-- cg / fade 欄位 -->
+        <div id="ed-fields-cg" style="display:none">
+          <div class="ed-label">cgType</div>
+          <input id="ed-cgType" class="ed-input" placeholder="meetUnderStars">
+          <div class="ed-label">then（跳轉場景）</div>
+          <input id="ed-cgThen" class="ed-input" placeholder="ch1">
+        </div>
+        <div id="ed-fields-fade" style="display:none">
+          <div class="ed-label">then（跳轉場景）</div>
+          <input id="ed-fadeThen" class="ed-input" placeholder="ending_good">
+        </div>
+
+        <!-- ending 欄位 -->
+        <div id="ed-fields-ending" style="display:none">
+          <div class="ed-label">title</div>
+          <input id="ed-endTitle" class="ed-input" placeholder="✦ 結局名稱 ✦">
+          <div class="ed-label">desc</div>
+          <textarea id="ed-endDesc" class="ed-textarea" rows="3" placeholder="結局描述文字..."></textarea>
+        </div>
+
+        <button id="ed-add-btn" onclick="ScriptEditor.addNode()" style="margin-top:10px">＋ 加入節點</button>
+
+        <div class="ed-label" style="margin-top:8px">已加入節點</div>
+        <div id="ed-node-list"></div>
+      </div>
+
+      <div id="editor-right">
+        <textarea id="ed-output" readonly placeholder="點擊「生成 JSON」後，結果會顯示在這裡…"></textarea>
+        <div id="editor-footer">
+          <button id="ed-gen-btn"  onclick="ScriptEditor.generate()">⚙ 生成 JSON</button>
+          <button id="ed-copy-btn" onclick="ScriptEditor.copy()">⎘ 複製</button>
+          <div class="ed-status" id="ed-status"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  背景渲染
+// ══════════════════════════════════════════════════════
+const bgCanvas = document.getElementById('bg-canvas');
+const bgCtx    = bgCanvas.getContext('2d');
+let bgType = 'starfall';
+let stars  = [];
+
+function initBG() {
+  bgCanvas.width  = bgCanvas.offsetWidth  || 900;
+  bgCanvas.height = bgCanvas.offsetHeight || 600;
+  // ★ 先清空舊陣列，讓舊物件可被 GC
+  stars.length = 0;
+  for (let i = 0; i < 200; i++) {
+    stars.push({
+      x:     Math.random() * bgCanvas.width,
+      y:     Math.random() * bgCanvas.height * 0.78,
+      r:     Math.random() * 1.6 + 0.3,
+      phase: Math.random() * Math.PI * 2,
+      speed: Math.random() * 0.018 + 0.006,
+    });
+  }
+}
+
+function drawBG(type) {
+  const w = bgCanvas.width, h = bgCanvas.height;
+  bgCtx.clearRect(0, 0, w, h);
+
+  // 夜空漸層
+  const sky = bgCtx.createLinearGradient(0, 0, 0, h * 0.76);
+  sky.addColorStop(0,   '#04010e');
+  sky.addColorStop(0.4, '#0c0720');
+  sky.addColorStop(0.7, '#160730');
+  sky.addColorStop(1,   '#280918');
+  bgCtx.fillStyle = sky;
+  bgCtx.fillRect(0, 0, w, h);
+
+  // 視差閃爍星星（大星近、移速快；小星遠、幾乎靜止）
+  stars.forEach(s => {
+    s.phase += s.speed;
+    s.x += s.r * 0.05;                          // 根據大小決定水平漂移速度
+    if (s.x > bgCanvas.width) s.x = 0;          // 循環滾動
+    const a = 0.35 + 0.65 * Math.abs(Math.sin(s.phase));
+    bgCtx.beginPath();
+    bgCtx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    bgCtx.fillStyle = `rgba(215,205,255,${a})`;
+    bgCtx.fill();
+  });
+
+  // 弦月
+  bgCtx.fillStyle = 'rgba(242,232,200,0.93)';
+  bgCtx.beginPath(); bgCtx.arc(w*0.82, h*0.13, 42, 0, Math.PI*2); bgCtx.fill();
+  bgCtx.fillStyle = 'rgba(4,1,22,1)';
+  bgCtx.beginPath(); bgCtx.arc(w*0.845, h*0.12, 37, 0, Math.PI*2); bgCtx.fill();
+
+  // 流星（starfall 模式）
+  if (type === 'starfall') {
+    const t = Date.now() / 1000;
+    for (let i = 0; i < 6; i++) {
+      const sx  = w * (0.05 + i * 0.16 + Math.sin(t * 0.4 + i) * 0.04);
+      const sy  = h * (0.04 + i * 0.055);
+      const len = 55 + i * 18;
+      const g   = bgCtx.createLinearGradient(sx, sy, sx + len*0.65, sy + len*0.9);
+      g.addColorStop(0,   'rgba(255,242,215,0)');
+      g.addColorStop(0.6, 'rgba(255,250,232,0.88)');
+      g.addColorStop(1,   'rgba(255,255,255,0)');
+      bgCtx.strokeStyle = g;
+      bgCtx.lineWidth   = 1.6;
+      bgCtx.beginPath();
+      bgCtx.moveTo(sx, sy);
+      bgCtx.lineTo(sx + len*0.65, sy + len*0.9);
+      bgCtx.stroke();
+    }
+  }
+
+  // 地面
+  const grd = bgCtx.createLinearGradient(0, h*0.74, 0, h);
+  grd.addColorStop(0, '#0b180b');
+  grd.addColorStop(1, '#040904');
+  bgCtx.fillStyle = grd;
+  bgCtx.beginPath();
+  bgCtx.moveTo(0, h*0.76);
+  bgCtx.bezierCurveTo(w*0.2, h*0.73, w*0.55, h*0.79, w*0.82, h*0.74);
+  bgCtx.bezierCurveTo(w*0.92, h*0.73, w*0.97, h*0.75, w, h*0.76);
+  bgCtx.lineTo(w, h); bgCtx.lineTo(0, h);
+  bgCtx.fill();
+}
+
+// ══════════════════════════════════════════════════════
+//  角色立繪
+// ══════════════════════════════════════════════════════
+function drawLuna(canvas, expr = 'normal') {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const hair = ctx.createLinearGradient(w*0.2, 0, w*0.8, h*0.55);
+  hair.addColorStop(0, '#b8d4f8'); hair.addColorStop(0.5, '#88b4f0'); hair.addColorStop(1, '#4878c0');
+
+  // 後髮
+  ctx.fillStyle = hair;
+  ctx.beginPath();
+  ctx.moveTo(w*0.15, h*0.08);
+  ctx.bezierCurveTo(w*0.05, h*0.4, w*0.03, h*0.72, w*0.1, h);
+  ctx.lineTo(w*0.34, h);
+  ctx.bezierCurveTo(w*0.28, h*0.6, w*0.25, h*0.28, w*0.3, h*0.05); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(w*0.85, h*0.08);
+  ctx.bezierCurveTo(w*0.95, h*0.4, w*0.97, h*0.72, w*0.9, h);
+  ctx.lineTo(w*0.66, h);
+  ctx.bezierCurveTo(w*0.72, h*0.6, w*0.75, h*0.28, w*0.7, h*0.05); ctx.fill();
+
+  // 制服
+  const body = ctx.createLinearGradient(w*0.3, h*0.44, w*0.7, h);
+  body.addColorStop(0, '#dce8ff'); body.addColorStop(1, '#9eb8e8');
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(w*0.25, h*0.45);
+  ctx.bezierCurveTo(w*0.19, h*0.56, w*0.15, h*0.76, w*0.18, h);
+  ctx.lineTo(w*0.82, h);
+  ctx.bezierCurveTo(w*0.85, h*0.76, w*0.81, h*0.56, w*0.75, h*0.45);
+  ctx.closePath(); ctx.fill();
+
+  // 蝴蝶結
+  ctx.fillStyle = '#ffb0d8';
+  ctx.beginPath();
+  ctx.moveTo(w*0.5, h*0.466); ctx.lineTo(w*0.43, h*0.522);
+  ctx.lineTo(w*0.5, h*0.5);   ctx.lineTo(w*0.57, h*0.522);
+  ctx.closePath(); ctx.fill();
+
+  // 皮膚（脖子＋臉）
+  ctx.fillStyle = '#fde8d8';
+  ctx.fillRect(w*0.43, h*0.35, w*0.14, h*0.13);
+  ctx.beginPath();
+  ctx.ellipse(w*0.5, h*0.22, w*0.195, h*0.196, 0, 0, Math.PI*2); ctx.fill();
+
+  // 前髮
+  ctx.fillStyle = hair;
+  ctx.beginPath();
+  ctx.moveTo(w*0.3, h*0.06);
+  ctx.bezierCurveTo(w*0.24, h*0.01, w*0.35, h*0.18, w*0.38, h*0.265);
+  ctx.bezierCurveTo(w*0.42, h*0.195, w*0.46, h*0.13, w*0.5, h*0.115);
+  ctx.bezierCurveTo(w*0.54, h*0.13, w*0.58, h*0.195, w*0.62, h*0.265);
+  ctx.bezierCurveTo(w*0.65, h*0.18, w*0.76, h*0.01, w*0.7, h*0.06);
+  ctx.bezierCurveTo(w*0.6, h*0.015, w*0.5, h*0.005, w*0.3, h*0.06); ctx.fill();
+
+  // 眼睛
+  const eyeY = h * (expr === 'surprised' ? 0.198 : 0.21);
+  const eyeH = expr === 'surprised' ? h*0.046 : h*0.034;
+  [[w*0.4, -0.1], [w*0.6, 0.1]].forEach(([ex, tilt]) => {
+    ctx.fillStyle = '#3a5fcc';
+    ctx.beginPath(); ctx.ellipse(ex, eyeY, w*0.054, eyeH, tilt, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#1a2f88';
+    ctx.beginPath(); ctx.ellipse(ex, eyeY, w*0.028, eyeH*0.7, tilt, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.beginPath(); ctx.ellipse(ex + w*0.005, eyeY - eyeH*0.3, w*0.011, eyeH*0.28, 0, 0, Math.PI*2); ctx.fill();
+  });
+  // 睫毛
+  ctx.strokeStyle = '#1a1a3a'; ctx.lineWidth = 1.5;
+  for (const [dx1, dx2] of [[-0.055, -0.015], [-0.04, -0.008]]) {
+    ctx.beginPath(); ctx.moveTo(w*(0.4+dx2), eyeY - eyeH*0.85); ctx.lineTo(w*(0.4+dx1), eyeY - eyeH*1.35); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w*(0.6-dx2), eyeY - eyeH*0.85); ctx.lineTo(w*(0.6-dx1), eyeY - eyeH*1.35); ctx.stroke();
+  }
+  // 嘴
+  ctx.strokeStyle = '#d08888'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+  if (expr === 'smile') {
+    ctx.beginPath();
+    ctx.moveTo(w*0.445, h*0.285);
+    ctx.bezierCurveTo(w*0.463, h*0.3, w*0.537, h*0.3, w*0.555, h*0.285); ctx.stroke();
+  } else if (expr === 'surprised') {
+    ctx.fillStyle = '#d08888';
+    ctx.beginPath(); ctx.ellipse(w*0.5, h*0.29, w*0.024, h*0.018, 0, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.moveTo(w*0.452, h*0.288); ctx.lineTo(w*0.548, h*0.288); ctx.stroke();
+  }
+  // 臉紅
+  if (expr !== 'normal') {
+    ctx.fillStyle = 'rgba(255,155,155,0.22)';
+    ctx.beginPath(); ctx.ellipse(w*0.34, h*0.26, w*0.062, h*0.024, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(w*0.66, h*0.26, w*0.062, h*0.024, 0, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function drawRei(canvas, expr = 'normal') {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const hair = ctx.createLinearGradient(w*0.2, 0, w*0.8, h*0.4);
+  hair.addColorStop(0, '#2a1040'); hair.addColorStop(0.5, '#3c1a5c'); hair.addColorStop(1, '#180825');
+
+  // 後髮整體
+  ctx.fillStyle = hair;
+  ctx.beginPath();
+  ctx.moveTo(w*0.18, h*0.07);
+  ctx.bezierCurveTo(w*0.09, h*0.22, w*0.11, h*0.38, w*0.2, h*0.46);
+  ctx.lineTo(w*0.28, h*0.39);
+  ctx.bezierCurveTo(w*0.3, h*0.44, w*0.31, h*0.52, w*0.3, h*0.56);
+  ctx.lineTo(w*0.35, h*0.56);
+  ctx.bezierCurveTo(w*0.38, h*0.35, w*0.41, h*0.14, w*0.5, h*0.1);
+  ctx.bezierCurveTo(w*0.59, h*0.14, w*0.62, h*0.35, w*0.65, h*0.56);
+  ctx.lineTo(w*0.7,  h*0.56);
+  ctx.bezierCurveTo(w*0.69, h*0.52, w*0.7, h*0.44, w*0.72, h*0.39);
+  ctx.lineTo(w*0.8, h*0.46);
+  ctx.bezierCurveTo(w*0.89, h*0.38, w*0.91, h*0.22, w*0.82, h*0.07);
+  ctx.bezierCurveTo(w*0.66, h*0.0, w*0.34, h*0.0, w*0.18, h*0.07); ctx.fill();
+
+  // 黑色制服
+  const body = ctx.createLinearGradient(w*0.3, h*0.46, w*0.7, h);
+  body.addColorStop(0, '#1a0830'); body.addColorStop(1, '#0c0420');
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(w*0.27, h*0.46);
+  ctx.bezierCurveTo(w*0.21, h*0.57, w*0.17, h*0.77, w*0.2, h);
+  ctx.lineTo(w*0.8, h);
+  ctx.bezierCurveTo(w*0.83, h*0.77, w*0.79, h*0.57, w*0.73, h*0.46);
+  ctx.closePath(); ctx.fill();
+
+  // 領口
+  ctx.strokeStyle = '#8a40c0'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(w*0.42, h*0.465); ctx.lineTo(w*0.5, h*0.555); ctx.lineTo(w*0.58, h*0.465); ctx.stroke();
+
+  // 皮膚
+  ctx.fillStyle = '#f4dfd4';
+  ctx.fillRect(w*0.43, h*0.36, w*0.14, h*0.13);
+  ctx.beginPath(); ctx.ellipse(w*0.5, h*0.22, w*0.19, h*0.195, 0, 0, Math.PI*2); ctx.fill();
+
+  // 前髮瀏海
+  ctx.fillStyle = hair;
+  ctx.beginPath();
+  ctx.moveTo(w*0.27, h*0.07);
+  ctx.bezierCurveTo(w*0.21, h*0.13, w*0.29, h*0.23, w*0.35, h*0.29);
+  ctx.bezierCurveTo(w*0.38, h*0.21, w*0.44, h*0.13, w*0.5, h*0.11);
+  ctx.bezierCurveTo(w*0.56, h*0.13, w*0.62, h*0.21, w*0.65, h*0.29);
+  ctx.bezierCurveTo(w*0.71, h*0.23, w*0.79, h*0.13, w*0.73, h*0.07);
+  ctx.closePath(); ctx.fill();
+
+  // 眼睛（深紫）
+  const eyeY = h * 0.215;
+  [[w*0.39, -0.05], [w*0.61, 0.05]].forEach(([ex, tilt]) => {
+    ctx.fillStyle = '#6a20a0';
+    ctx.beginPath(); ctx.ellipse(ex, eyeY, w*0.052, h*0.032, tilt, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#3a0868';
+    ctx.beginPath(); ctx.ellipse(ex, eyeY, w*0.027, h*0.022, tilt, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.beginPath(); ctx.ellipse(ex + w*0.004, eyeY - h*0.01, w*0.009, h*0.009, 0, 0, Math.PI*2); ctx.fill();
+  });
+
+  // 嘴
+  ctx.strokeStyle = '#c08898'; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+  if (expr === 'smile') {
+    ctx.beginPath();
+    ctx.moveTo(w*0.452, h*0.288);
+    ctx.bezierCurveTo(w*0.468, h*0.298, w*0.532, h*0.298, w*0.548, h*0.288); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.moveTo(w*0.46, h*0.288); ctx.lineTo(w*0.54, h*0.288); ctx.stroke();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  角色登錄表（CharRegistry）—— GC 強化版
+//
+//  記憶體策略：
+//  ┌─────────────────────────────────────────────────────┐
+//  │ _imgCache    外部圖片 HTMLImageElement               │
+//  │              → blit 完成後立即釋放（src = ''）       │
+//  │              → base64 來源額外清除 data URL          │
+//  │                                                     │
+//  │ _canvasCache offscreen canvas（LRU，上限 MAX_SLOTS） │
+//  │              → 超限時逐出最久未使用的項目            │
+//  │              → 逐出時呼叫 canvas.width=0 釋放像素緩衝│
+//  │                                                     │
+//  │ purge(name)  手動移除整個角色的所有快取與 DOM        │
+//  │ gc()         強制執行一次 LRU 裁切                   │
+//  └─────────────────────────────────────────────────────┘
+// ══════════════════════════════════════════════════════
+const CharRegistry = {
+  // ── 設定 ──────────────────────────────────────────
+  MAX_SLOTS: 20,          // offscreen canvas 最大快取數（每張 ≈414KB，20 張 ≈8MB）
+
+  // ── 內部狀態 ──────────────────────────────────────
+  _defs:        {},       // name → { type, pos, drawFn? }
+  _imgCache:    {},       // name_expr → HTMLImageElement（blit 後釋放）
+  _canvasCache: {},       // name_expr → { canvas, lastUsed: timestamp }
+
+  // ── 內建角色登錄 ──────────────────────────────────
+  registerBuiltin(name, pos, drawFn) {
+    this._defs[name] = { type: 'builtin', pos, drawFn };
+  },
+
+  // ── 外部角色登錄（URL / base64 / File）────────────
+  async register(name, { pos = 'left', expressions = {} } = {}) {
+    // 重新登錄時先清掉舊快取
+    this.purge(name);
+    this._defs[name] = { type: 'external', pos };
+
+    await Promise.all(
+      Object.entries(expressions).map(([expr, src]) =>
+        this._loadImage(name, expr, src)
+      )
+    );
+
+    // fallback：未提供的表情指向 normal
+    const normalImg = this._imgCache[`${name}_normal`];
+    if (normalImg) {
+      for (const e of ['smile', 'surprised']) {
+        if (!this._imgCache[`${name}_${e}`])
+          this._imgCache[`${name}_${e}`] = normalImg;
+      }
+    }
+    return this;
+  },
+
+  async registerFromFiles(name, { pos = 'left', files = {} } = {}) {
+    const expressions = {};
+    for (const [expr, file] of Object.entries(files))
+      expressions[expr] = await this._fileToDataURL(file);
+    return this.register(name, { pos, expressions });
+  },
+
+  // ── 圖片載入（載完後不主動釋放，等 getCanvas blit 後才釋放）
+  _loadImage(name, expr, src) {
+    return new Promise((resolve) => {
+      const doLoad = (url) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => { this._imgCache[`${name}_${expr}`] = img; resolve(img); };
+        img.onerror = () => {
+          console.warn(`[CharRegistry] 無法載入 ${name}/${expr}`);
+          resolve(null);
+        };
+        img.src = url;
+      };
+      src instanceof File
+        ? this._fileToDataURL(src).then(doLoad)
+        : doLoad(src);
+    });
+  },
+
+  _fileToDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload  = e => resolve(e.target.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  },
+
+  // ── 取得 offscreen canvas（LRU 快取）──────────────
+  getCanvas(name, expr = 'normal') {
+    const key = `${name}_${expr}`;
+
+    // 命中快取：更新 LRU 時間戳後回傳
+    if (this._canvasCache[key]) {
+      this._canvasCache[key].lastUsed = Date.now();
+      return this._canvasCache[key].canvas;
+    }
+
+    const def = this._defs[name];
+    if (!def) return null;
+
+    // 建立 offscreen canvas
+    const tmp = document.createElement('canvas');
+    tmp.width = 280; tmp.height = 380;
+
+    if (def.type === 'builtin') {
+      def.drawFn(tmp, expr);
+
+    } else {
+      const imgKey = key;
+      const img    = this._imgCache[imgKey] || this._imgCache[`${name}_normal`];
+      if (img) {
+        tmp.getContext('2d').drawImage(img, 0, 0, 280, 380);
+
+        // ★ blit 完成後釋放 HTMLImageElement
+        //   （只釋放非 fallback 的那一份，避免其他表情還在等）
+        if (this._imgCache[imgKey] === img) {
+          img.src = '';                          // 讓瀏覽器釋放解碼像素
+          delete this._imgCache[imgKey];
+        }
+      }
+    }
+
+    // 存入快取
+    this._canvasCache[key] = { canvas: tmp, lastUsed: Date.now() };
+
+    // ★ 超過上限時執行 LRU 裁切
+    this._evictIfNeeded();
+
+    return tmp;
+  },
+
+  // ── LRU 裁切 ──────────────────────────────────────
+  _evictIfNeeded() {
+    const keys = Object.keys(this._canvasCache);
+    if (keys.length <= this.MAX_SLOTS) return;
+
+    // 按 lastUsed 升序排列，移除最舊的幾項
+    keys.sort((a, b) => this._canvasCache[a].lastUsed - this._canvasCache[b].lastUsed);
+    const toEvict = keys.slice(0, keys.length - this.MAX_SLOTS);
+    toEvict.forEach(k => this._evictOne(k));
+
+    if (toEvict.length)
+      console.debug(`[CharRegistry GC] 逐出 ${toEvict.length} 個快取項：`, toEvict);
+  },
+
+  _evictOne(key) {
+    const entry = this._canvasCache[key];
+    if (!entry) return;
+    // ★ width=0 強制釋放 GPU / CPU 像素緩衝
+    entry.canvas.width  = 0;
+    entry.canvas.height = 0;
+    delete this._canvasCache[key];
+  },
+
+  // ── 手動強制 GC ───────────────────────────────────
+  gc() {
+    const keys   = Object.keys(this._canvasCache);
+    const target = Math.floor(this.MAX_SLOTS * 0.6);   // 裁到 60% 水位
+    if (keys.length <= target) return 0;
+    keys.sort((a, b) => this._canvasCache[a].lastUsed - this._canvasCache[b].lastUsed);
+    const toEvict = keys.slice(0, keys.length - target);
+    toEvict.forEach(k => this._evictOne(k));
+    console.debug(`[CharRegistry GC] 手動 GC：釋放 ${toEvict.length} 項，剩餘 ${target}`);
+    return toEvict.length;
+  },
+
+  // ── 移除整個角色（含 DOM canvas）─────────────────
+  purge(name) {
+    // canvas cache
+    Object.keys(this._canvasCache)
+      .filter(k => k.startsWith(`${name}_`))
+      .forEach(k => this._evictOne(k));
+
+    // img cache
+    Object.keys(this._imgCache)
+      .filter(k => k.startsWith(`${name}_`))
+      .forEach(k => {
+        this._imgCache[k].src = '';
+        delete this._imgCache[k];
+      });
+
+    // DOM canvas
+    const el = document.getElementById(`char-${name}`);
+    if (el) { el.width = 0; el.height = 0; el.remove(); }
+    delete chars[name];
+    delete this._defs[name];
+  },
+
+  // ── 診斷用：顯示目前記憶體佔用摘要 ──────────────
+  memInfo() {
+    const slots    = Object.keys(this._canvasCache).length;
+    const imgSlots = Object.keys(this._imgCache).length;
+    const estKB    = slots * 280 * 380 * 4 / 1024;
+    console.table({
+      'canvas 快取數':   slots,
+      'img 快取數':      imgSlots,
+      '估計 Canvas KB':  Math.round(estKB),
+      '上限 slots':      this.MAX_SLOTS,
+    });
+    return { slots, imgSlots, estKB };
+  },
+
+  // ── 向後相容的 invalidate ─────────────────────────
+  invalidate(name) {
+    Object.keys(this._canvasCache)
+      .filter(k => k.startsWith(`${name}_`))
+      .forEach(k => this._evictOne(k));
+  },
+
+  list()       { return Object.keys(this._defs); },
+  defaultPos(name) { return this._defs[name]?.pos || 'left'; },
+  has(name)    { return !!this._defs[name]; },
+};
+
+// 內建角色登錄（必須在 drawLuna / drawRei 定義後執行）
+CharRegistry.registerBuiltin('luna', 'left',  drawLuna);
+CharRegistry.registerBuiltin('rei',  'right', drawRei);
+
+// 向前相容：getCachedChar 直接委派給 CharRegistry
+function getCachedChar(name, expr) { return CharRegistry.getCanvas(name, expr); }
+
+// ══════════════════════════════════════════════════════
+//  角色 DOM 管理（chars）
+//  ─ 動態建立 / 重用 <canvas> 元素
+//  ─ 不再寫死 luna / rei，支援任意角色名
+// ══════════════════════════════════════════════════════
+const chars = {};   // name → { canvas, pos }
+
+function _ensureCharCanvas(name) {
+  if (chars[name]) return chars[name].canvas;
+  const pos    = CharRegistry.defaultPos(name);
+  const canvas = document.createElement('canvas');
+  canvas.id        = `char-${name}`;
+  canvas.width     = 280;
+  canvas.height    = 380;
+  canvas.className = `character hidden ${pos}`;
+  document.getElementById('character-layer').appendChild(canvas);
+  chars[name] = { canvas, pos };
+  return canvas;
+}
+
+function initChars() {
+  // 確保內建角色有對應 DOM（HTML 已預建 char-luna / char-rei，指定過去即可）
+  ['luna','rei'].forEach(name => {
+    const existing = document.getElementById(`char-${name}`);
+    if (existing) {
+      chars[name] = { canvas: existing, pos: CharRegistry.defaultPos(name) };
+    } else {
+      _ensureCharCanvas(name);
+    }
+    // 預熱內建角色快取
+    ['normal','smile','surprised'].forEach(e => CharRegistry.getCanvas(name, e));
+  });
+}
+
+function showChar(name, expr = 'normal', pos) {
+  // 若角色尚未登錄，靜默跳過並警告
+  if (!CharRegistry.has(name)) {
+    console.warn(`[showChar] 角色 "${name}" 尚未登錄，請先呼叫 CharRegistry.register()`);
+    return;
+  }
+  _ensureCharCanvas(name);   // 外部角色首次出場時動態建立 canvas
+  const c      = chars[name];
+  const cached = CharRegistry.getCanvas(name, expr);
+  if (cached) {
+    const ctx = c.canvas.getContext('2d');
+    ctx.clearRect(0, 0, 280, 380);
+    ctx.drawImage(cached, 0, 0);
+  }
+  const p = pos || c.pos;
+  c.canvas.className = `character active ${p}`;
+}
+
+function hideChar(name) {
+  const c = chars[name]; if (!c) return;
+  c.canvas.className = `character hidden ${c.pos}`;
+}
+
+function activeChar(name) {
+  Object.keys(chars).forEach(k => {
+    const c = chars[k];
+    if (c.canvas.classList.contains('hidden')) return;
+    const pos = ['left','center','right'].find(p => c.canvas.classList.contains(p)) || c.pos;
+    c.canvas.className = `character ${k === name ? 'active' : 'inactive'} ${pos}`;
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  角色管理面板 CharPanel
+//  ─ 遊戲內 UI：讓使用者直接上傳圖片並即時預覽
+//  ─ 掛在 #sys-bar「角色」按鈕下
+// ══════════════════════════════════════════════════════
+const CharPanel = {
+  open()  { document.getElementById('char-panel').classList.add('show'); },
+  close() { document.getElementById('char-panel').classList.remove('show'); },
+
+  // 讀取表單並呼叫 CharRegistry.register()
+  async submit() {
+    const name = document.getElementById('cp-name').value.trim();
+    const pos  = document.getElementById('cp-pos').value;
+    if (!name) { this._status('⚠ 請輸入角色 ID', true); return; }
+
+    const exprInputs = document.querySelectorAll('.cp-expr-row');
+    const expressions = {};
+    let hasAny = false;
+
+    for (const row of exprInputs) {
+      const exprName = row.dataset.expr;
+      const urlInput = row.querySelector('.cp-url');
+      const fileInput= row.querySelector('.cp-file');
+
+      // file 優先，其次 url
+      if (fileInput.files[0]) {
+        expressions[exprName] = fileInput.files[0];
+        hasAny = true;
+      } else if (urlInput.value.trim()) {
+        expressions[exprName] = urlInput.value.trim();
+        hasAny = true;
+      }
+    }
+
+    if (!hasAny) { this._status('⚠ 請至少提供一個表情圖片', true); return; }
+
+    this._status('載入中…');
+    try {
+      await CharRegistry.register(name, { pos, expressions });
+      _ensureCharCanvas(name);
+      this._status(`✓ 角色「${name}」已登錄（${Object.keys(expressions).length} 個表情）`);
+      this._refreshList();
+      // 預覽
+      this._preview(name, 'normal');
+    } catch (e) {
+      this._status(`✕ 載入失敗：${e.message}`, true);
+    }
+  },
+
+  _preview(name, expr) {
+    const previewCanvas = document.getElementById('cp-preview');
+    const cached = CharRegistry.getCanvas(name, expr);
+    if (!cached) return;
+    previewCanvas.width  = 140;
+    previewCanvas.height = 190;
+    previewCanvas.getContext('2d').drawImage(cached, 0, 0, 140, 190);
+  },
+
+  _refreshList() {
+    const ul = document.getElementById('cp-char-list');
+    ul.innerHTML = '';
+    CharRegistry.list().forEach(name => {
+      const def = CharRegistry._defs[name];
+      const li  = document.createElement('div');
+      li.className = 'cp-char-item';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className   = 'cp-char-name';
+      nameSpan.textContent = name;
+
+      const badge = document.createElement('span');
+      badge.className   = 'cp-char-badge';
+      badge.textContent = def.type === 'builtin' ? '內建' : '外部';
+      badge.style.color = def.type === 'builtin' ? 'var(--name)' : 'var(--accent)';
+
+      const previewBtn = document.createElement('button');
+      previewBtn.className   = 'cp-mini-btn';
+      previewBtn.textContent = '預覽';
+      previewBtn.onclick = () => this._preview(name, 'normal');
+
+      li.append(nameSpan, badge, previewBtn);
+      ul.appendChild(li);
+    });
+  },
+
+  _statusTimer: null,
+  _status(msg, warn = false) {
+    const el = document.getElementById('cp-status');
+    el.textContent = msg;
+    el.style.color = warn ? '#ff9090' : 'rgba(180,255,180,0.7)';
+    clearTimeout(this._statusTimer);
+    this._statusTimer = setTimeout(() => el.textContent = '', 3500);
+  },
+};
+
+// ══════════════════════════════════════════════════════
+//  CG 演出
+// ══════════════════════════════════════════════════════
+function drawCG_meetUnderStars(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = 900, h = 600;
+
+  const bg = ctx.createLinearGradient(0, 0, 0, h);
+  bg.addColorStop(0, '#03010a'); bg.addColorStop(0.55, '#08041a'); bg.addColorStop(1, '#120620');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+
+  // 密集星星
+  for (let i = 0; i < 360; i++) {
+    const x = Math.random()*w, y = Math.random()*h*0.73;
+    ctx.beginPath(); ctx.arc(x, y, Math.random()*1.9+0.2, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(215,205,255,${Math.random()*0.55+0.45})`; ctx.fill();
+  }
+
+  // 月亮
+  ctx.fillStyle = 'rgba(248,238,215,0.94)';
+  ctx.beginPath(); ctx.arc(w*0.85, h*0.12, 55, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(3,1,12,1)';
+  ctx.beginPath(); ctx.arc(w*0.872, h*0.107, 48, 0, Math.PI*2); ctx.fill();
+
+  // 流星
+  for (let i = 0; i < 9; i++) {
+    const sx = 40+i*100, sy = 22+i*26, len = 72+i*14;
+    const g = ctx.createLinearGradient(sx, sy, sx+len*0.62, sy+len*0.88);
+    g.addColorStop(0, 'rgba(255,245,220,0)'); g.addColorStop(0.65, 'rgba(255,252,240,0.9)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.strokeStyle = g; ctx.lineWidth = 1.9;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx+len*0.62, sy+len*0.88); ctx.stroke();
+  }
+
+  // 地面
+  const grd = ctx.createLinearGradient(0, h*0.7, 0, h);
+  grd.addColorStop(0, '#0b1c0b'); grd.addColorStop(1, '#030803');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.moveTo(0, h*0.72);
+  ctx.bezierCurveTo(w*0.22, h*0.68, w*0.55, h*0.75, w*0.78, h*0.69);
+  ctx.bezierCurveTo(w*0.88, h*0.68, w*0.94, h*0.71, w, h*0.72);
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.fill();
+
+  // 人物剪影
+  function silhouette(cx, gy, flip) {
+    ctx.save();
+    if (flip) { ctx.translate(cx*2, 0); ctx.scale(-1, 1); }
+    ctx.fillStyle = 'rgba(4,1,14,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(cx-18, gy); ctx.bezierCurveTo(cx-22, gy-70, cx-16, gy-115, cx-4, gy-142);
+    ctx.bezierCurveTo(cx+4, gy-148, cx+16, gy-142, cx+20, gy-112);
+    ctx.bezierCurveTo(cx+24, gy-72, cx+18, gy, cx+18, gy); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, gy-153, 19, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx-12, gy-165);
+    ctx.bezierCurveTo(cx-32, gy-158, cx-46, gy-126, cx-42, gy-96);
+    ctx.bezierCurveTo(cx-40, gy-87, cx-36, gy-83, cx-34, gy-88);
+    ctx.bezierCurveTo(cx-32, gy-106, cx-26, gy-130, cx-14, gy-152); ctx.fill();
+    ctx.restore();
+  }
+  silhouette(305, 505, false);
+  silhouette(595, 505, true);
+
+  // 標題字
+  ctx.fillStyle = 'rgba(245,216,122,0.93)';
+  ctx.font = 'bold 30px "Noto Serif TC", serif';
+  ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(245,216,122,0.45)'; ctx.shadowBlur = 20;
+  ctx.fillText('星落之夜', 450, 558);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(200,170,255,0.62)';
+  ctx.font = '13px "Cinzel", serif';
+  ctx.fillText('STARFALL NIGHT', 450, 582);
+}
+
+function showCG(type, resolve) {
+  const layer  = document.getElementById('cg-layer');
+  const canvas = document.getElementById('cg-canvas');
+  if (type === 'meetUnderStars') drawCG_meetUnderStars(canvas);
+  layer.classList.add('show');
+
+  const skip = document.getElementById('cg-skip');
+  const handler = () => {
+    skip.removeEventListener('click', handler);
+    layer.classList.remove('show');
+    resolve();
+  };
+  skip.addEventListener('click', handler);
+}
+
+// ══════════════════════════════════════════════════════
+//  過場效果 (Promise化)
+// ══════════════════════════════════════════════════════
+function fadeTransition(resolve) {
+  const el = document.getElementById('transition');
+  el.style.transition = 'opacity 0.42s';
+  el.style.opacity    = '1';
+  el.classList.add('active');
+  setTimeout(() => {
+    if (resolve) resolve();
+    el.style.transition = 'opacity 0.65s';
+    el.style.opacity    = '0';
+    setTimeout(() => el.classList.remove('active'), 700);
+  }, 460);
+}
+
+// ══════════════════════════════════════════════════════
+//  劇本資料
+// ══════════════════════════════════════════════════════
+const SCRIPT = {
+  start: [
+    { type:'dialogue', speaker:'', text:'……星星，落下來了。', bg:'starfall', charHide:['luna','rei'] },
+    { type:'dialogue', speaker:'', text:'今夜，是百年一次的流星雨。\n傳說，在流星落下的瞬間，\n兩顆相遇的靈魂，會被命運連繫。' },
+    { type:'cg', cgType:'meetUnderStars', then:'ch1' },
+  ],
+  ch1: [
+    { type:'dialogue', speaker:'', text:'第一章　星之相遇', bg:'night', nameCard:'第一章 ✦ 星之相遇', charHide:['luna','rei'] },
+    { type:'dialogue', speaker:'', text:'校園屋頂。夜風輕撫。\n妳獨自一人，仰望著滿天繁星……' },
+    { type:'dialogue', speaker:'陸奈', text:'（哇……今晚的星星真的好多……）', charShow:{ luna:{ expr:'smile', pos:'center' } } },
+    { type:'dialogue', speaker:'陸奈', text:'（悄悄一個人跑上來看流星雨，\n要是被老師發現就麻煩了。）', expr:{ luna:'normal' } },
+    { type:'dialogue', speaker:'???', text:'……妳也來看流星雨嗎。', charShow:{ rei:{ expr:'normal', pos:'right' } } },
+    { type:'dialogue', speaker:'陸奈', text:'——！', expr:{ luna:'surprised' }, active:'luna' },
+    { type:'dialogue', speaker:'陸奈', text:'（有、有人！？以為只有我一個人在這裡……）' },
+    { type:'dialogue', speaker:'冬夜', text:'別緊張。我不是鬼。', active:'rei' },
+    { type:'dialogue', speaker:'冬夜', text:'……我叫冬夜。班上應該見過吧。' },
+    { type:'dialogue', speaker:'陸奈', text:'啊……隔壁班的……我是陸奈。\n很少看到你一個人出來。', expr:{ luna:'normal' }, active:'luna' },
+    { type:'dialogue', speaker:'冬夜', text:'這裡安靜。喜歡。', active:'rei' },
+    { type:'dialogue', speaker:'陸奈', text:'……（說話不多，但感覺不壞。）', expr:{ luna:'smile' }, active:'luna' },
+    { type:'dialogue', speaker:'', text:'就這樣，兩個人並肩，靜靜地等待流星。' },
+    { type:'choice', choices:[
+      { text:'「你知道流星雨的傳說嗎？」', next:'ch2_legend' },
+      { text:'「……你平常喜歡來這裡嗎？」', next:'ch2_place'  },
+    ]},
+  ],
+  ch2_legend: [
+    { type:'dialogue', speaker:'陸奈', text:'「你知道今晚流星雨的傳說嗎？\n說是……被流星照到的兩個人，會被命運連繫。」', expr:{ luna:'smile' }, active:'luna' },
+    { type:'dialogue', speaker:'冬夜', text:'……聽過。', active:'rei' },
+    { type:'dialogue', speaker:'陸奈', text:'「欸，你信嗎？」', active:'luna' },
+    { type:'dialogue', speaker:'冬夜', text:'……不知道。\n但如果是真的，也挺有意思。', expr:{ rei:'smile' }, active:'rei' },
+    { type:'dialogue', speaker:'陸奈', text:'（咦……他笑了。\n比想像中，溫柔的臉。）', expr:{ luna:'surprised' }, active:'luna' },
+    { type:'dialogue', speaker:'', text:'就在這時，第一道流星劃過天空。', bg:'starfall' },
+    { type:'dialogue', speaker:'陸奈', text:'——！流、流星！', expr:{ luna:'surprised' } },
+    { type:'dialogue', speaker:'冬夜', text:'……嗯。', expr:{ rei:'smile' }, active:'rei' },
+    { type:'choice', choices:[
+      { text:'（許了一個願望……）',         next:'end_good'        },
+      { text:'（靜靜地，和他一起看著。）',   next:'end_good_silent' },
+    ]},
+  ],
+  ch2_place: [
+    { type:'dialogue', speaker:'陸奈', text:'「……你平常也喜歡來這裡嗎？」', expr:{ luna:'normal' }, active:'luna' },
+    { type:'dialogue', speaker:'冬夜', text:'有時候。\n能看見整個城市的燈光，還有星星。', active:'rei' },
+    { type:'dialogue', speaker:'陸奈', text:'「確實好漂亮。我今天是第一次上來。」', expr:{ luna:'smile' }, active:'luna' },
+    { type:'dialogue', speaker:'冬夜', text:'……以後可以再來。', expr:{ rei:'smile' }, active:'rei' },
+    { type:'dialogue', speaker:'陸奈', text:'（這句話說得，像在邀請我……嗎？）', expr:{ luna:'surprised' }, active:'luna' },
+    { type:'dialogue', speaker:'', text:'就在這時，流星雨開始了。', bg:'starfall' },
+    { type:'dialogue', speaker:'陸奈', text:'哇……！好漂亮……！', expr:{ luna:'smile' } },
+    { type:'dialogue', speaker:'冬夜', text:'……嗯。', expr:{ rei:'smile' }, active:'rei' },
+    { type:'dialogue', speaker:'', text:'兩個人的影子，被流星照亮。' },
+    { type:'choice', choices:[
+      { text:'（希望這一刻，能久一點。）',     next:'end_good'   },
+      { text:'（悄悄地，把心情放進心裡。）',   next:'end_normal' },
+    ]},
+  ],
+  end_good: [
+    { type:'dialogue', speaker:'', text:'流星一道道落下，妳許了一個心願——', bg:'starfall' },
+    { type:'dialogue', speaker:'', text:'希望能和他，再多說一些話。', charHide:['luna','rei'] },
+    { type:'dialogue', speaker:'', text:'……不知道是不是流星聽見了，\n回教室的路上，他說——' },
+    { type:'dialogue', speaker:'冬夜', text:'「……明天中午，要不要一起來這裡？」', charShow:{ rei:{ expr:'smile', pos:'center' } } },
+    { type:'dialogue', speaker:'陸奈', text:'……！', charShow:{ luna:{ expr:'surprised', pos:'right' } } },
+    { type:'dialogue', speaker:'陸奈', text:'「……好。」', expr:{ luna:'smile' } },
+    { type:'dialogue', speaker:'', text:'就這樣，那個夜晚，成了我們故事的起點。', charHide:['luna','rei'] },
+    { type:'fade', then:'ending_good' },
+  ],
+  end_good_silent: [
+    { type:'dialogue', speaker:'', text:'妳什麼都沒許。\n只是靜靜地，感受著這個瞬間。', bg:'starfall', charHide:['luna','rei'] },
+    { type:'dialogue', speaker:'', text:'流星的光，照在他的側臉上。\n妳覺得……那道光，好溫柔。' },
+    { type:'dialogue', speaker:'冬夜', text:'「……真是美好的夜晚。」', charShow:{ rei:{ expr:'smile', pos:'center' } } },
+    { type:'dialogue', speaker:'', text:'妳點了點頭，心裡某個地方，\n悄悄地，暖了起來。', charHide:['rei'] },
+    { type:'fade', then:'ending_good' },
+  ],
+  end_normal: [
+    { type:'dialogue', speaker:'', text:'妳把那份悸動，輕輕地放進了心底。', bg:'night', charHide:['luna','rei'] },
+    { type:'dialogue', speaker:'', text:'也許有一天，會告訴他。\n也許不會。\n\n但這個夜晚，只屬於妳自己。' },
+    { type:'fade', then:'ending_normal' },
+  ],
+  ending_good: [
+    { type:'ending',
+      title:'✦  星落結緣  ✦',
+      desc:'流星見証了這一夜的相遇。\n那道劃過天空的光，帶著妳的願望，\n化成了命運的紅線，悄悄地，\n將兩顆靈魂繫在了一起。\n\n——故事，才剛剛開始。' },
+  ],
+  ending_normal: [
+    { type:'ending',
+      title:'✦  一個人的星空  ✦',
+      desc:'有些情感，不需要說出口。\n那個夜晚，那片星空，\n只是靜靜地，\n屬於妳自己的，美好回憶。\n\n——或許，下次再相遇時，\n       故事就會不同了。' },
+  ],
+};
+
+// ══════════════════════════════════════════════════════
+//  優化後的遊戲引擎
+// ══════════════════════════════════════════════════════
+const Game = {
+  state: {
+    currentScene:  'start',
+    index:         0,
+    isTyping:      false,
+    waiting:       false,
+    transitioning: false,   // 過場／CG 進行中，防止誤觸
+    currentText:   '',
+  },
+
+  // 非同步延遲工具
+  wait: ms => new Promise(resolve => setTimeout(resolve, ms)),
+
+  // 視覺更新（抽成獨立方法，與邏輯解耦）
+  applyVisuals(node) {
+    if (node.bg)       bgType = node.bg;
+    if (node.nameCard) this.updateNameCard(node.nameCard);
+    if (node.charHide) node.charHide.forEach(n => hideChar(n));
+    if (node.charShow) Object.entries(node.charShow).forEach(([n, opts]) => showChar(n, opts.expr, opts.pos));
+    if (node.active)   activeChar(node.active);
+    // expr 單獨更新表情（blit 快取）
+    if (node.expr) {
+      Object.entries(node.expr).forEach(([n, e]) => {
+        if (!chars[n]) return;
+        const cached = getCachedChar(n, e);
+        const ctx    = chars[n].canvas.getContext('2d');
+        ctx.clearRect(0, 0, 280, 380);
+        ctx.drawImage(cached, 0, 0);
+      });
+    }
+  },
+
+  // node type → 處理函式對應表
+  get handlers() {
+    return {
+      dialogue: n => this.handleDialogue(n),
+      choice:   n => this.handleChoice(n),
+      cg:       n => this.handleCG(n),
+      fade:     n => this.handleFade(n),
+      ending:   n => this.showEnding(n.title, n.desc),
+    };
+  },
+
+  // 執行特定節點
+  async executeNode(node) {
+    if (!node || this.state.transitioning) return;
+    this.applyVisuals(node);
+    const handler = this.handlers[node.type];
+    if (handler) await handler(node);
+  },
+
+  // ── 各類型 handler ────────────────────────────────
+  async handleDialogue(node) {
+    const box  = document.getElementById('dialogue-box');
+    const hint = document.getElementById('click-hint');
+    document.getElementById('choice-layer').classList.add('hidden');
+    box.style.display = 'block';
+    hint.classList.add('hidden');
+    document.getElementById('speaker-name').textContent = node.speaker || '';
+    await this.typeText(node.text, document.getElementById('dialogue-text'));
+    hint.classList.remove('hidden');
+  },
+
+  handleChoice(node) {
+    document.getElementById('dialogue-box').style.display = 'none';
+    document.getElementById('click-hint').classList.add('hidden');
+    this.state.waiting = true;
+    this.showChoices(node.choices);
+  },
+
+  async handleCG(node) {
+    this.state.transitioning = true;
+    document.getElementById('dialogue-box').style.display = 'none';
+    document.getElementById('click-hint').classList.add('hidden');
+    await new Promise(resolve => showCG(node.cgType, resolve));
+    await new Promise(resolve => fadeTransition(resolve));
+    this.state.transitioning = false;
+    this.goto(node.then);
+  },
+
+  async handleFade(node) {
+    this.state.transitioning = true;
+    document.getElementById('dialogue-box').style.display = 'none';
+    document.getElementById('click-hint').classList.add('hidden');
+    await new Promise(resolve => fadeTransition(resolve));
+    this.state.transitioning = false;
+    this.goto(node.then);
+  },
+
+  // ── 工具方法 ──────────────────────────────────────
+  updateNameCard(text) {
+    const nc = document.getElementById('name-card');
+    nc.textContent = text;
+    nc.classList.add('show');
+    setTimeout(() => nc.classList.remove('show'), 3500);
+  },
+
+  async typeText(text, el, speed = 38) {
+    this.state.isTyping    = true;
+    this.state.currentText = text;
+    el.textContent         = '';
+
+    for (const char of text) {
+      if (!this.state.isTyping) break;
+      el.textContent += char;
+      await this.wait(speed);
+    }
+
+    el.textContent      = text;
+    this.state.isTyping = false;
+  },
+
+  skipType() {
+    this.state.isTyping = false;
+    document.getElementById('dialogue-text').textContent = this.state.currentText;
+  },
+
+  goto(sceneId) {
+    this.state.currentScene = sceneId;
+    this.state.index        = 0;
+    this.state.waiting      = false;
+    this.executeNode(SCRIPT[sceneId]?.[0]);
+  },
+
+  next() {
+    if (this.state.transitioning) return;
+    if (this.state.waiting)       return;
+    if (this.state.isTyping)      { this.skipType(); return; }
+
+    this.state.index++;
+    const scene = SCRIPT[this.state.currentScene];
+    if (scene && this.state.index < scene.length) {
+      this.executeNode(scene[this.state.index]);
+    }
+  },
+
+  handleClick() { this.next(); },
+
+  showChoices(choices) {
+    const layer = document.getElementById('choice-layer');
+    layer.querySelectorAll('.choice-btn').forEach(el => el.remove());
+    layer.classList.remove('hidden');
+
+    choices.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className   = 'choice-btn';
+      btn.textContent = c.text;
+      btn.onclick = () => {
+        this.state.waiting = false;
+        layer.classList.add('hidden');
+        document.getElementById('dialogue-box').style.display = 'block';
+        this.goto(c.next);
+      };
+      layer.appendChild(btn);
+    });
+  },
+
+  showEnding(title, desc) {
+    document.getElementById('dialogue-box').style.display = 'none';
+    document.getElementById('choice-layer').classList.add('hidden');
+    document.getElementById('ending-title').textContent = title;
+    document.getElementById('ending-desc').textContent  = desc;
+    setTimeout(() => document.getElementById('ending-screen').classList.add('show'), 600);
+  },
+
+  start() {
+    document.getElementById('title-screen').style.display = 'none';
+    document.getElementById('dialogue-box').style.display = 'block';
+    this.goto('start');
+  },
+};
+
+// ══════════════════════════════════════════════════════
+//  動畫主循環 & 初始化
+// ══════════════════════════════════════════════════════
+function loop() {
+  drawBG(bgType);
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('load', () => {
+  initBG();
+  initChars();
+  bgType = 'starfall';
+  loop();
+});
+
+window.addEventListener('resize', () => {
+  bgCanvas.width  = bgCanvas.offsetWidth;
+  bgCanvas.height = bgCanvas.offsetHeight;
+  initBG();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'Enter') {
+    e.preventDefault();
+    Game.handleClick();
+  }
+  // Escape 關閉面板
+  if (e.code === 'Escape') {
+    SaveManager.closePanel();
+    ScriptEditor.close();
+    CharPanel.close();
+  }
+});
+
+// ══════════════════════════════════════════════════════
+//  模組一：存檔管理器 SaveManager
+//  ─ localStorage key: vn_save_{0..2}
+//  ─ 紀錄 currentScene, index, bgType, timestamp
+// ══════════════════════════════════════════════════════
+const SaveManager = {
+  SLOT_COUNT: 3,
+  KEY: i => `vn_save_${i}`,
+  _mode: 'save',   // 'save' | 'load'
+
+  // 讀取單一槽位資料
+  read(i) {
+    try { return JSON.parse(localStorage.getItem(this.KEY(i))); } catch { return null; }
+  },
+
+  // 儲存目前進度到槽位 i
+  write(i) {
+    const data = {
+      scene:     Game.state.currentScene,
+      index:     Game.state.index,
+      bgType,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(this.KEY(i), JSON.stringify(data));
+    this._refreshSlots();
+    this._flash(`已儲存到欄位 ${i + 1}`);
+  },
+
+  // 從槽位 i 讀取並跳轉
+  load(i) {
+    const d = this.read(i);
+    if (!d) return;
+    bgType = d.bgType || 'night';
+    Game.state.currentScene  = d.scene;
+    Game.state.index         = d.index;
+    Game.state.waiting       = false;
+    Game.state.transitioning = false;
+    Game.state.isTyping      = false;
+    // 重新執行該節點（視覺復原）
+    const node = SCRIPT[d.scene]?.[d.index];
+    if (node) Game.executeNode(node);
+    this.closePanel();
+    this._flash(`已讀取欄位 ${i + 1}`);
+  },
+
+  // 刪除槽位
+  erase(i) {
+    localStorage.removeItem(this.KEY(i));
+    this._refreshSlots();
+  },
+
+  // 開啟面板，mode = 'save' | 'load'
+  openPanel(mode) {
+    this._mode = mode;
+    document.getElementById('save-panel-title').textContent =
+      mode === 'save' ? '── 儲存進度 ──' : '── 讀取進度 ──';
+    this._refreshSlots();
+    document.getElementById('save-panel').classList.add('show');
+  },
+
+  closePanel() {
+    document.getElementById('save-panel').classList.remove('show');
+  },
+
+  _refreshSlots() {
+    const container = document.getElementById('save-slots');
+    container.innerHTML = '';
+    for (let i = 0; i < this.SLOT_COUNT; i++) {
+      const d    = this.read(i);
+      const slot = document.createElement('div');
+      slot.className = `save-slot ${d ? '' : 'empty'}`;
+
+      const label = document.createElement('div');
+      label.className = 'slot-label';
+      label.textContent = `欄位 ${i + 1}`;
+
+      const scene = document.createElement('div');
+      scene.className = 'slot-scene';
+      scene.textContent = d ? `${d.scene}  #${d.index}` : '── 空欄位 ──';
+
+      const time = document.createElement('div');
+      time.className = 'slot-time';
+      time.textContent = d ? new Date(d.timestamp).toLocaleString('zh-TW') : '';
+
+      const actions = document.createElement('div');
+      actions.className = 'slot-actions';
+
+      if (this._mode === 'save') {
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'slot-btn';
+        saveBtn.textContent = '存入';
+        saveBtn.onclick = () => this.write(i);
+        actions.appendChild(saveBtn);
+      } else {
+        const loadBtn = document.createElement('button');
+        loadBtn.className = `slot-btn ${d ? '' : 'danger'}`;
+        loadBtn.textContent = d ? '讀取' : '空';
+        loadBtn.disabled = !d;
+        if (d) loadBtn.onclick = () => this.load(i);
+        actions.appendChild(loadBtn);
+      }
+
+      if (d) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'slot-btn danger';
+        delBtn.textContent = '刪除';
+        delBtn.onclick = e => { e.stopPropagation(); this.erase(i); };
+        actions.appendChild(delBtn);
+      }
+
+      slot.append(label, scene, time, actions);
+      container.appendChild(slot);
+    }
+  },
+
+  _flashTimer: null,
+  _flash(msg) {
+    // 借用 name-card 顯示提示訊息
+    const nc = document.getElementById('name-card');
+    nc.textContent = msg;
+    nc.classList.add('show');
+    clearTimeout(this._flashTimer);
+    this._flashTimer = setTimeout(() => nc.classList.remove('show'), 2200);
+  },
+};
+
+// ══════════════════════════════════════════════════════
+//  模組二：音效管理器 AudioManager
+//  ─ 使用 AudioContext + OscillatorNode 生成環境音（無需外部檔案）
+//  ─ 支援 fadeIn / fadeOut / toggle / setVolume / mute
+// ══════════════════════════════════════════════════════
+const AudioManager = {
+  ctx:        null,
+  masterGain: null,
+  _nodes:     [],
+  _gainNodes: [],     // ★ 追蹤所有 GainNode，fadeOut 時一併 disconnect
+  _muted:     false,
+  _vol:       0.5,
+  _running:   false,
+
+  // 初始化 AudioContext（需使用者互動後才能啟動）
+  _init() {
+    if (this.ctx) return;
+    this.ctx        = new (window.AudioContext || window.webkitAudioContext)();
+    this.masterGain = this.ctx.createGain();
+    this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
+    this.masterGain.connect(this.ctx.destination);
+  },
+
+  // 建立「星空環境音」—— GC 強化：
+  //   ★ 每個 osc/gain 在 stop 後自動 disconnect
+  //   ★ _gainNodes 追蹤所有 GainNode，方便清理
+  //   ★ onended callback 從 _nodes 移除已結束的節點
+  _buildAmbient() {
+    if (!this.ctx) return;
+    this._sweepDeadNodes();    // 先清掉上一輪已結束的節點
+    this._nodes = [];
+    this._gainNodes = [];
+
+    const notes   = [261.63, 293.66, 329.63, 392.00, 440.00, 392.00, 329.63, 293.66];
+    const noteLen = 2.8;
+    const now     = this.ctx.currentTime;
+
+    notes.forEach((freq, idx) => {
+      const osc  = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+
+      const start = now + idx * noteLen;
+      const end   = start + noteLen * notes.length;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.18, start + 0.4);
+      gain.gain.setValueAtTime(0.18, end - 0.5);
+      gain.gain.linearRampToValueAtTime(0, end);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(start);
+      osc.stop(end);
+
+      // ★ 結束後斷開連接，讓 GC 可以回收這兩個節點
+      osc.onended = () => {
+        try { osc.disconnect(); gain.disconnect(); } catch {}
+        this._nodes = this._nodes.filter(n => n !== osc);
+      };
+
+      this._nodes.push(osc);
+      this._gainNodes.push(gain);
+    });
+
+    // 持續低頻底層（循環，不自動 stop）
+    const lfo   = this.ctx.createOscillator();
+    const lGain = this.ctx.createGain();
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(55, now);
+    lGain.gain.setValueAtTime(0.06, now);
+    lfo.connect(lGain);
+    lGain.connect(this.masterGain);
+    lfo.start(now);
+    this._nodes.push(lfo);
+    this._gainNodes.push(lGain);
+
+    // 循環重建計時器
+    clearTimeout(this._loopTimer);
+    const loopDur = noteLen * notes.length * 1000;
+    this._loopTimer = setTimeout(() => {
+      if (this._running) this._buildAmbient();
+    }, loopDur);
+  },
+
+  // ★ 清除已結束（狀態為 'finished'）的節點
+  _sweepDeadNodes() {
+    const dead = this._nodes.filter(n => {
+      // OscillatorNode 結束後無法再用，但沒有標準屬性判斷
+      // 用 try start(0) 偵測：已停止的節點會拋 InvalidStateError
+      try { n.frequency; return false; }   // 仍存活
+      catch { return true; }               // 已 GC 或已失效
+    });
+    dead.forEach(n => {
+      try { n.disconnect(); } catch {}
+      this._nodes = this._nodes.filter(x => x !== n);
+    });
+    // 同步清理對應 GainNode
+    this._gainNodes.forEach(g => {
+      try {
+        // 若 gain 已沒有任何輸入連接，就斷開輸出
+        if (g.numberOfInputs === 0) g.disconnect();
+      } catch {}
+    });
+    this._gainNodes = this._gainNodes.filter(g => {
+      try { g.gain.value; return true; } catch { return false; }
+    });
+  },
+
+  // 淡入播放
+  fadeIn(dur = 1.5) {
+    this._init();
+    this._running = true;
+    this._buildAmbient();
+    const now = this.ctx.currentTime;
+    this.masterGain.gain.cancelScheduledValues(now);
+    this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+    this.masterGain.gain.linearRampToValueAtTime(this._muted ? 0 : this._vol, now + dur);
+    document.getElementById('mute-btn').textContent = '🔊';
+  },
+
+  // 淡出停止 —— ★ 停止後 disconnect 所有節點
+  fadeOut(dur = 1.2) {
+    if (!this.ctx) return;
+    clearTimeout(this._loopTimer);
+    const now = this.ctx.currentTime;
+    this.masterGain.gain.cancelScheduledValues(now);
+    this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+    this.masterGain.gain.linearRampToValueAtTime(0, now + dur);
+
+    setTimeout(() => {
+      this._nodes.forEach(n => {
+        try { n.stop(); } catch {}
+        try { n.disconnect(); } catch {}
+      });
+      this._gainNodes.forEach(g => { try { g.disconnect(); } catch {} });
+      this._nodes      = [];
+      this._gainNodes  = [];
+      this._running    = false;
+    }, (dur + 0.15) * 1000);
+  },
+
+  // 切換播放 / 停止
+  toggle() {
+    if (this._running) this.fadeOut();
+    else               this.fadeIn();
+  },
+
+  // 靜音切換
+  toggleMute() {
+    this._muted = !this._muted;
+    if (this.ctx) {
+      const now = this.ctx.currentTime;
+      this.masterGain.gain.cancelScheduledValues(now);
+      this.masterGain.gain.linearRampToValueAtTime(
+        this._muted ? 0 : this._vol, now + 0.3
+      );
+    }
+    document.getElementById('mute-btn').textContent = this._muted ? '🔇' : '🔊';
+  },
+
+  // 設定音量（0–1）
+  setVolume(v) {
+    this._vol = parseFloat(v);
+    if (this.ctx && !this._muted) {
+      const now = this.ctx.currentTime;
+      this.masterGain.gain.cancelScheduledValues(now);
+      this.masterGain.gain.linearRampToValueAtTime(this._vol, now + 0.15);
+    }
+  },
+};
+
+// ══════════════════════════════════════════════════════
+//  模組三：劇本編輯器 ScriptEditor
+//  ─ 可視化新增節點 → 生成合法 SCRIPT JSON 片段
+//  ─ 支援 dialogue / choice / cg / fade / ending
+// ══════════════════════════════════════════════════════
+const ScriptEditor = {
+  nodes: [],   // 目前編輯中的節點陣列
+
+  open()  { document.getElementById('editor-modal').classList.add('show'); },
+  close() { document.getElementById('editor-modal').classList.remove('show'); },
+
+  // 切換類型時顯示對應欄位
+  onTypeChange() {
+    const type = document.getElementById('ed-type').value;
+    ['dialogue','choice','cg','fade','ending'].forEach(t => {
+      document.getElementById(`ed-fields-${t}`).style.display = t === type ? '' : 'none';
+    });
+  },
+
+  // 從表單讀取當前節點資料
+  _readNode() {
+    const type = document.getElementById('ed-type').value;
+    const node = { type };
+
+    if (type === 'dialogue') {
+      const speaker  = document.getElementById('ed-speaker').value.trim();
+      const text     = document.getElementById('ed-text').value;
+      const bg       = document.getElementById('ed-bg').value;
+      const charShow = document.getElementById('ed-charShow').value.trim();
+      const charHide = document.getElementById('ed-charHide').value.trim();
+      const active   = document.getElementById('ed-active').value.trim();
+      node.speaker = speaker;
+      node.text    = text.replace(/\\n/g, '\n');
+      if (bg)       node.bg       = bg;
+      if (active)   node.active   = active;
+      if (charHide) node.charHide = charHide.split(',').map(s => s.trim()).filter(Boolean);
+      if (charShow) {
+        try { node.charShow = JSON.parse(charShow); }
+        catch { this._status('⚠ charShow JSON 格式錯誤', true); return null; }
+      }
+
+    } else if (type === 'choice') {
+      const lines = document.getElementById('ed-choices').value.trim().split('\n').filter(Boolean);
+      node.choices = lines.map(l => {
+        const [text, next] = l.split('|');
+        return { text: text?.trim(), next: next?.trim() };
+      }).filter(c => c.text && c.next);
+      if (!node.choices.length) { this._status('⚠ 選項格式錯誤', true); return null; }
+
+    } else if (type === 'cg') {
+      node.cgType = document.getElementById('ed-cgType').value.trim();
+      node.then   = document.getElementById('ed-cgThen').value.trim();
+
+    } else if (type === 'fade') {
+      node.then = document.getElementById('ed-fadeThen').value.trim();
+
+    } else if (type === 'ending') {
+      node.title = document.getElementById('ed-endTitle').value.trim();
+      node.desc  = document.getElementById('ed-endDesc').value.trim();
+    }
+
+    return node;
+  },
+
+  // 加入節點到列表
+  addNode() {
+    const node = this._readNode();
+    if (!node) return;
+    this.nodes.push(node);
+    this._refreshList();
+    this._status(`✓ 已加入 ${node.type} 節點（共 ${this.nodes.length} 個）`);
+  },
+
+  // 刪除節點
+  deleteNode(i) {
+    this.nodes.splice(i, 1);
+    this._refreshList();
+  },
+
+  // 刷新節點列表 UI
+  _refreshList() {
+    const list = document.getElementById('ed-node-list');
+    list.innerHTML = '';
+    this.nodes.forEach((n, i) => {
+      const item = document.createElement('div');
+      item.className = 'ed-node-item';
+
+      const badge = document.createElement('span');
+      badge.className   = 'ed-node-badge';
+      badge.textContent = n.type;
+
+      const label = document.createElement('span');
+      label.textContent = this._nodeLabel(n);
+      label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+
+      const del = document.createElement('button');
+      del.className   = 'ed-node-del';
+      del.textContent = '✕';
+      del.title       = '刪除';
+      del.onclick = e => { e.stopPropagation(); this.deleteNode(i); };
+
+      item.append(badge, label, del);
+      list.appendChild(item);
+    });
+  },
+
+  // 節點摘要文字
+  _nodeLabel(n) {
+    if (n.type === 'dialogue') return `${n.speaker || '旁白'}: ${n.text?.slice(0,20)}…`;
+    if (n.type === 'choice')   return `${n.choices?.length} 個選項`;
+    if (n.type === 'cg')       return `CG: ${n.cgType} → ${n.then}`;
+    if (n.type === 'fade')     return `→ ${n.then}`;
+    if (n.type === 'ending')   return n.title || '結局';
+    return n.type;
+  },
+
+  // 生成 JSON 輸出
+  generate() {
+    if (!this.nodes.length) { this._status('⚠ 尚未加入任何節點', true); return; }
+    const sceneName = document.getElementById('ed-scene-name').value.trim() || 'new_scene';
+    // 縮排 2 格，key 加引號的合法 JS 物件片段
+    const json = JSON.stringify({ [sceneName]: this.nodes }, null, 2);
+    // 加上使用說明 header
+    const output = [
+      `// ── 生成時間：${new Date().toLocaleString('zh-TW')} ──`,
+      `// 將以下內容貼入 SCRIPT 物件內（逗號分隔）：`,
+      '',
+      json,
+    ].join('\n');
+    document.getElementById('ed-output').value = output;
+    this._status(`✓ 已生成 ${sceneName}（${this.nodes.length} 個節點）`);
+  },
+
+  // 複製到剪貼簿
+  async copy() {
+    const text = document.getElementById('ed-output').value;
+    if (!text) { this._status('⚠ 請先生成 JSON', true); return; }
+    try {
+      await navigator.clipboard.writeText(text);
+      this._status('✓ 已複製到剪貼簿！');
+    } catch {
+      document.getElementById('ed-output').select();
+      this._status('請手動複製（Ctrl+A → Ctrl+C）', true);
+    }
+  },
+
+  _statusTimer: null,
+  _status(msg, warn = false) {
+    const el  = document.getElementById('ed-status');
+    el.textContent  = msg;
+    el.style.color  = warn ? '#ff9090' : 'rgba(180,255,180,0.7)';
+    clearTimeout(this._statusTimer);
+    this._statusTimer = setTimeout(() => el.textContent = '', 3000);
+  },
+};
+
+// 初始化編輯器欄位顯示
+window.addEventListener('load', () => {
+  ScriptEditor.onTypeChange();
+  CharPanel._refreshList();   // 顯示內建角色
+
+  // ★ 定期 GC：每 60 秒執行一次 LRU 裁切（遊戲長時間運行保護）
+  setInterval(() => {
+    const freed = CharRegistry.gc();
+    if (freed) console.debug(`[定期 GC] 釋放 ${freed} 個 canvas 快取`);
+  }, 60_000);
+
+  // ★ 頁面隱藏時暫停音訊，減少背景資源消耗
+  document.addEventListener('visibilitychange', () => {
+    if (!AudioManager.ctx) return;
+    if (document.hidden) {
+      AudioManager.ctx.suspend().catch(() => {});
+    } else {
+      AudioManager.ctx.resume().catch(() => {});
+    }
+  });
+
+  // 第一次互動後自動淡入音樂
+  document.getElementById('game').addEventListener('click', () => {
+    if (!AudioManager._running) AudioManager.fadeIn();
+  }, { once: true });
+});</script>
+</body>
+</html>
